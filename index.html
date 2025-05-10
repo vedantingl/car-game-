@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>City Car Game</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.min.js"></script>
+  <style>
+    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #222; }
+    canvas { border: 2px solid white; }
+  </style>
+</head>
+<body>
+<script>
+let player;
+let coins = [];
+let npcs = [];
+let buildings = [];
+let score = 0;
+let gameState = 'playing';
+
+function setup() {
+  createCanvas(800, 600);
+  player = new Car(width / 2, height / 2, color(255, 0, 0));
+
+  // Initialize coins
+  for (let i = 0; i < 10; i++) {
+    coins.push(new Coin(random(width), random(height)));
+  }
+
+  // Initialize NPC cars
+  for (let i = 0; i < 5; i++) {
+    npcs.push(new NPCCar(random(width), random(height), color(0, 0, 255)));
+  }
+
+  // Initialize buildings (city grid)
+  let gridSize = 100;
+  for (let x = 0; x < width; x += gridSize) {
+    for (let y = 0; y < height; y += gridSize) {
+      if (random() > 0.7) {
+        buildings.push({ x: x + 20, y: y + 20, w: gridSize - 40, h: gridSize - 40 });
+      }
+    }
+  }
+}
+
+function draw() {
+  background(100); // Road color
+
+  // Draw buildings
+  fill(50);
+  for (let b of buildings) {
+    rect(b.x, b.y, b.w, b.h);
+  }
+
+  if (gameState === 'playing') {
+    // Update and show player
+    player.update();
+    player.show();
+
+    // Update and show coins
+    for (let i = coins.length - 1; i >= 0; i--) {
+      coins[i].show();
+      if (player.hits(coins[i])) {
+        coins.splice(i, 1);
+        score += 10;
+        coins.push(new Coin(random(width), random(height)));
+      }
+    }
+
+    // Update and show NPC cars
+    for (let npc of npcs) {
+      npc.update();
+      npc.show();
+      if (player.hits(npc)) {
+        gameState = 'over';
+      }
+    }
+  } else if (gameState === 'over') {
+    textAlign(CENTER);
+    textSize(32);
+    fill(255);
+    text('Game Over! Score: ' + score, width / 2, height / 2);
+    text('Press Enter to Restart', width / 2, height / 2 + 50);
+  }
+
+  // Display score
+  textSize(20);
+  fill(255);
+  textAlign(LEFT);
+  text('Score: ' + score, 20, 30);
+}
+
+function keyPressed() {
+  if (keyCode === ENTER && gameState === 'over') {
+    score = 0;
+    gameState = 'playing';
+    player.reset();
+    coins = [];
+    npcs = [];
+    for (let i = 0; i < 10; i++) {
+      coins.push(new Coin(random(width), random(height)));
+    }
+    for (let i = 0; i < 5; i++) {
+      npcs.push(new NPCCar(random(width), random(height), color(0, 0, 255)));
+    }
+  }
+}
+
+class Car {
+  constructor(x, y, col) {
+    this.pos = createVector(x, y);
+    this.vel = createVector(0, 0);
+    this.angle = -PI / 2;
+    this.col = col;
+    this.speed = 0;
+    this.maxSpeed = 5;
+    this.turnSpeed = 0.05;
+    this.friction = 0.98;
+    this.size = { w: 20, h: 40 };
+  }
+
+  update() {
+    if (keyIsDown(UP_ARROW)) this.speed += 0.1;
+    if (keyIsDown(DOWN_ARROW)) this.speed -= 0.05;
+    if (keyIsDown(LEFT_ARROW)) this.angle -= this.turnSpeed;
+    if (keyIsDown(RIGHT_ARROW)) this.angle += this.turnSpeed;
+
+    this.speed *= this.friction;
+    this.speed = constrain(this.speed, -this.maxSpeed / 2, this.maxSpeed);
+
+    this.vel = p5.Vector.fromAngle(this.angle).mult(this.speed);
+    this.pos.add(this.vel);
+
+    // Keep car in bounds
+    this.pos.x = constrain(this.pos.x, 0, width);
+    this.pos.y = constrain(this.pos.y, 0, height);
+
+    // Check building collisions
+    for (let b of buildings) {
+      if (this.pos.x > b.x && this.pos.x < b.x + b.w && this.pos.y > b.y && this.pos.y < b.y + b.h) {
+        this.speed = 0;
+        this.pos.sub(this.vel);
+      }
+    }
+  }
+
+  show() {
+    push();
+    translate(this.pos.x, this.pos.y);
+    rotate(this.angle);
+    fill(this.col);
+    rectMode(CENTER);
+    rect(0, 0, this.size.w, this.size.h);
+    pop();
+  }
+
+  hits(obj) {
+    let d = dist(this.pos.x, this.pos.y, obj.pos.x, obj.pos.y);
+    return d < (this.size.h / 2 + obj.size / 2);
+  }
+
+  reset() {
+    this.pos.set(width / 2, height / 2);
+    this.vel.set(0, 0);
+    this.angle = -PI / 2;
+    this.speed = 0;
+  }
+}
+
+class NPCCar extends Car {
+  constructor(x, y, col) {
+    super(x, y, col);
+    this.speed = random(1, 3);
+    this.angle = random(TWO_PI);
+  }
+
+  update() {
+    this.vel = p5.Vector.fromAngle(this.angle).mult(this.speed);
+    this.pos.add(this.vel);
+
+    // Bounce off edges
+    if (this.pos.x < 0 || this.pos.x > width) {
+      this.angle = PI - this.angle;
+      this.pos.x = constrain(this.pos.x, 0, width);
+    }
+    if (this.pos.y < 0 || this.pos.y > height) {
+      this.angle = -this.angle;
+      this.pos.y = constrain(this.pos.y, 0, height);
+    }
+
+    // Avoid buildings
+    for (let b of buildings) {
+      if (this.pos.x > b.x && this.pos.x < b.x + b.w && this.pos.y > b.y && this.pos.y < b.y + b.h) {
+        this.angle += PI;
+        this.pos.sub(this.vel);
+      }
+    }
+  }
+}
+
+class Coin {
+  constructor(x, y) {
+    this.pos = createVector(x, y);
+    this.size = 10;
+  }
+
+  show() {
+    fill(255, 255, 0);
+    ellipse(this.pos.x, this.pos.y, this.size);
+  }
+}
+</script>
+</body>
+</html>
+
